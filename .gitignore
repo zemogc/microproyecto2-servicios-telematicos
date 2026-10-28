@@ -1,1 +1,5 @@
 nginx/certs/server.key
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
