@@ -22,11 +22,13 @@ DEMO_USERS = [
 def create_app(config_object="app.config.Config", init_db=False):
     app = Flask(__name__)
     app.config.from_object(config_object)
+    app.json.sort_keys = False
     db.init_app(app)
 
-    from .api import system, users
+    from .api import insights, system, users
 
     app.register_blueprint(users.bp)
+    app.register_blueprint(insights.bp)
     app.register_blueprint(system.bp)
     init_metrics(app)
 

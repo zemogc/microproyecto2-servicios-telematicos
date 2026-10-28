@@ -5,3 +5,4 @@ cryptography==43.0.1
 prometheus-client==0.21.0
 gunicorn==23.0.0
 requests==2.32.3
+anthropic==2.3.0
