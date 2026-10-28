@@ -43,12 +43,18 @@ Microproyecto 2 · Servicios Telemáticos
 
 OpsCenter empezó como un CRUD de usuarios en Flask y ahora es un **centro de operaciones** completo, empaquetado con Docker Compose:
 
+- **Acceso con inicio de sesión** y permisos por rol: solo los administradores modifican usuarios; el resto ve en modo lectura.
 - **Gestión de usuarios** con contraseñas con hash, validación por campo, roles, búsqueda y filtros.
+- **Sin contraseñas por defecto**: el primer arranque genera claves aleatorias para la app, MySQL y Grafana.
 - **HTTPS de verdad**: Nginx como proxy inverso con TLS 1.2/1.3, HTTP/2, HSTS, CSP y rate limiting. El certificado se genera solo en el primer arranque.
 - **Monitoreo**: Prometheus recolecta métricas del host (Node Exporter) y de la propia aplicación (tráfico, latencia, errores, usuarios). Grafana trae un dashboard aprovisionado como código y hay 6 reglas de alerta.
 - **Copiloto IA**: lee las métricas en vivo, calcula un puntaje de salud y, con Claude, explica en lenguaje natural qué pasa y qué hacer. Sin API key sigue funcionando con un motor de reglas local.
 
 ## Capturas
+
+| Inicio de sesión |
+|---|
+| <img src="docs/screenshots/login.png" alt="Pantalla de inicio de sesión"> |
 
 | Dashboard completo | Copiloto IA |
 |---|---|
@@ -117,21 +123,23 @@ Requisitos: Docker con Docker Compose v2.
 ```bash
 git clone https://github.com/zemogc/microproyecto2-servicios-telematicos.git
 cd microproyecto2-servicios-telematicos
-cp .env.example .env          # cambia contraseñas y, si quieres, agrega ANTHROPIC_API_KEY
 docker compose up -d --build
+cat secrets/admin_password    # contraseña del usuario "admin" de OpsCenter
 ```
+
+No hace falta configurar nada: en el primer arranque se generan contraseñas aleatorias en `secrets/` (ignorada por git). Si quieres personalizar algo (por ejemplo, agregar `ANTHROPIC_API_KEY`), copia `.env.example` a `.env`.
 
 En menos de un minuto todo queda arriba (`docker compose ps` muestra los servicios `healthy`):
 
 | Servicio | URL | Credenciales |
 |---|---|---|
-| OpsCenter | https://localhost | — |
-| Grafana | http://localhost:3000 | `admin` / `admin` (configurable en `.env`) |
-| Prometheus | http://localhost:9090 | — |
+| OpsCenter | https://localhost | `admin` / contenido de `secrets/admin_password` |
+| Grafana | http://localhost:3000 | `admin` / contenido de `secrets/grafana_admin_password` |
+| Prometheus | http://localhost:9090 | Solo accesible desde tu máquina |
 
 > El certificado es autofirmado, así que el navegador mostrará una advertencia la primera vez. Para desplegar en otra IP, agrégala a `CERT_HOSTS` y borra `nginx/certs/` para regenerarlo.
 
-Se crean 5 usuarios demo (contraseña `Demo1234!`). Desactívalo con `SEED_DEMO_DATA=false`.
+Se crean además 5 usuarios de ejemplo **sin contraseña utilizable**: el administrador puede asignarles una desde la interfaz para probar los roles. Desactívalo con `SEED_DEMO_DATA=false`.
 
 ## Copiloto IA
 
@@ -154,8 +162,12 @@ Nginx limita `/api/ai/` a 6 peticiones por minuto por IP, y cada diagnóstico qu
 
 ## API
 
+Toda la API exige sesión iniciada (cookie `HttpOnly`, `Secure`, `SameSite`); sin ella responde `401`. Crear, editar y eliminar usuarios requiere rol `admin` (`403` en otro caso).
+
 | Método | Ruta | Descripción |
 |---|---|---|
+| `POST` | `/login` · `/logout` | Inicia o cierra sesión (formulario) |
+| `GET` | `/api/auth/me` | Usuario de la sesión actual |
 | `GET` | `/api/users?q=&role=&page=&per_page=` | Lista paginada con búsqueda y filtro por rol |
 | `GET` | `/api/users/stats` | Total y conteo por rol |
 | `GET` | `/api/users/<id>` | Detalle de un usuario |
@@ -205,17 +217,23 @@ La explicación de las métricas del sistema está en [METRICAS.md](METRICAS.md)
 
 ## Seguridad
 
+- **Autenticación obligatoria** para el dashboard y toda la API. Cookie de sesión `HttpOnly`, `Secure` y `SameSite=Lax`, con expiración a las 8 h; cambiar la contraseña cierra las sesiones abiertas.
+- **Autorización por rol**: solo `admin` crea, edita o elimina usuarios. Un admin no puede borrarse ni quitarse el rol a sí mismo, para no dejar el sistema sin administrador.
+- **Protección CSRF**: las peticiones que modifican datos desde otro origen se rechazan (`403`).
+- **Freno a fuerza bruta**: `/login` admite 10 intentos por minuto por IP (luego `429`), los intentos fallidos quedan en el log y la respuesta tarda lo mismo exista o no el usuario.
+- **Sin contraseñas por defecto**: MySQL, la clave de sesión, el admin de OpsCenter y el de Grafana usan secretos aleatorios generados en `secrets/` y montados como archivos (`*_FILE`), no como variables a la vista.
+- **Monitoreo no expuesto**: Grafana y Prometheus solo escuchan en `127.0.0.1` y la API de administración de Prometheus (`/-/quit`, `/-/reload`) está desactivada.
 - Contraseñas con hash (`werkzeug.security`, scrypt). El hash nunca sale en la API.
 - TLS 1.2/1.3 con HTTP/2, HSTS, `Content-Security-Policy` estricta (sin scripts inline), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` y `Permissions-Policy`.
-- Rate limiting en Nginx: 20 r/s para `/api/` y 6 r/min para `/api/ai/`.
+- Rate limiting en Nginx: 20 r/s para `/api/`, 6 r/min para `/api/ai/` y 10 r/min para `/login`.
 - `/metrics` bloqueado desde fuera: solo Prometheus lo lee por la red interna.
 - Redes Docker separadas (`backend` / `monitoring`). MySQL no expone puertos.
 - La app corre como usuario sin privilegios (`uid 10001`).
-- Secretos en `.env` (ignorado por git). El certificado y la llave se generan localmente y nunca se versionan.
+- `secrets/`, `.env`, el certificado y la llave se generan localmente y nunca se versionan.
 
 ## Pruebas
 
-25 pruebas con `pytest` (SQLite en memoria; Prometheus y Claude simulados):
+34 pruebas con `pytest` (SQLite en memoria; Prometheus y Claude simulados):
 
 ```bash
 cd webapp
@@ -237,6 +255,7 @@ docker run --rm -v "$PWD/webapp:/src" -w /src python:3.12-slim \
 ├── docker-compose.yml          # 7 servicios, healthchecks, redes y volúmenes
 ├── .env.example                # variables de configuración
 ├── Vagrantfile                 # VM Ubuntu con Docker en 192.168.50.3
+├── scripts/generate-secrets.sh # contraseñas aleatorias en el primer arranque
 ├── nginx/
 │   ├── default.conf            # TLS, cabeceras de seguridad, rate limit
 │   └── generate-certs.sh       # certificado autofirmado con SAN
@@ -251,10 +270,11 @@ docker run --rm -v "$PWD/webapp:/src" -w /src python:3.12-slim \
     ├── Dockerfile · gunicorn.conf.py · wsgi.py
     ├── app/
     │   ├── __init__.py         # app factory, bootstrap de BD y datos demo
+    │   ├── auth.py             # sesión, roles, CSRF y cuenta admin inicial
     │   ├── config.py · models.py · metrics.py
     │   ├── api/                # users, insights, system
     │   ├── services/           # prometheus, insights (reglas), copilot (Claude)
-    │   ├── templates/index.html
+    │   ├── templates/          # index.html, login.html
     │   └── static/             # css, js, logo
     └── tests/
 ```
@@ -265,7 +285,7 @@ docker run --rm -v "$PWD/webapp:/src" -w /src python:3.12-slim \
 vagrant up
 ```
 
-Crea una VM Ubuntu 22.04 en `192.168.50.3`, instala Docker y ejecuta `docker compose up -d --build`. Luego abre https://192.168.50.3, http://192.168.50.3:3000 y http://192.168.50.3:9090.
+Crea una VM Ubuntu 22.04 en `192.168.50.3`, instala Docker y ejecuta `docker compose up -d --build`. Al terminar muestra la contraseña de `admin`. Luego abre https://192.168.50.3, http://192.168.50.3:3000 y http://192.168.50.3:9090 (en la VM el monitoreo escucha en la red privada host-only).
 
 ## Solución de problemas
 
@@ -276,6 +296,10 @@ Crea una VM Ubuntu 22.04 en `192.168.50.3`, instala Docker y ejecuta `docker com
 | El copiloto dice "Modo local" | Define `ANTHROPIC_API_KEY` en `.env` y ejecuta `docker compose up -d app` |
 | Disco aparece como "sin datos" | Node Exporter no ve sistemas de archivos ext4/xfs/btrfs/zfs escribibles en el host |
 | `429 Too Many Requests` en el copiloto | Es el rate limit de Nginx: espera un minuto |
+| ¿Cuál es la contraseña? | `cat secrets/admin_password` (OpsCenter) y `cat secrets/grafana_admin_password` (Grafana) |
+| Olvidé o quiero cambiar la contraseña de admin | Cámbiala desde la tabla de usuarios, o borra la BD con `docker compose down -v` y `secrets/admin_password` para regenerarla |
+| Vengo de una versión anterior y la app no conecta a MySQL | La BD se creó con la contraseña antigua: pon ese valor en `MYSQL_PASSWORD` de `.env` y borra `secrets/db_password`, o reinicia con `docker compose down -v` |
+| `429` al iniciar sesión | Demasiados intentos: espera un minuto |
 | Reiniciar desde cero | `docker compose down -v` (borra la BD y el historial de métricas) |
 
 ## Licencia
