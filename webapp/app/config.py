@@ -27,7 +27,6 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     SEED_DEMO_DATA = _bool("SEED_DEMO_DATA", True)
-    JSON_SORT_KEYS = False
 
     PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
     GRAFANA_PUBLIC_URL = os.environ.get("GRAFANA_PUBLIC_URL", "")
