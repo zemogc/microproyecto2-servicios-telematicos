@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ config.APP_NAME }}</title>
+</head>
+<body>
+<h1>{{ config.APP_NAME }} v{{ config.APP_VERSION }}</h1>
+<p>API disponible en <code>/api/users</code>, salud en <code>/health</code> y métricas en <code>/metrics</code>.</p>
+<ul id="users"></ul>
+<script>
+fetch('/api/users').then(r => r.json()).then(data => {
+    const list = document.getElementById('users');
+    data.items.forEach(u => {
+        const li = document.createElement('li');
+        li.textContent = `${u.name} (@${u.username}) · ${u.role}`;
+        list.appendChild(li);
+    });
+});
+</script>
+</body>
+</html>

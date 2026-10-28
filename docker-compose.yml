@@ -3,8 +3,9 @@ services:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root
-    volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      MYSQL_DATABASE: opscenter
+      MYSQL_USER: opscenter
+      MYSQL_PASSWORD: opscenter
     networks:
       - red-app
 
@@ -12,9 +13,9 @@ services:
     build: ./webapp
     environment:
       MYSQL_HOST: db
-      MYSQL_USER: root
-      MYSQL_PASSWORD: root
-      MYSQL_DB: myflaskapp
+      MYSQL_USER: opscenter
+      MYSQL_PASSWORD: opscenter
+      MYSQL_DB: opscenter
     depends_on:
       - db
     networks:
