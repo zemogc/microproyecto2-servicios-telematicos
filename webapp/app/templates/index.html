@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ config.APP_VERSION }}">
 </head>
-<body>
+<body class="{{ '' if current_user.role == 'admin' else 'read-only' }}" data-user-id="{{ current_user.id }}">
 <div class="bg-glow" aria-hidden="true"></div>
 
 <header class="topbar">
@@ -31,6 +31,13 @@
         <button class="btn btn-icon" id="theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
         </button>
+        <div class="user-chip">
+            <span class="avatar" aria-hidden="true">{{ current_user.name[:1]|upper }}</span>
+            <span class="who-text"><b>{{ current_user.username }}</b><small>{{ current_user.role }}</small></span>
+            <form method="post" action="{{ url_for('auth.logout') }}">
+                <button class="btn btn-sm" type="submit" title="Cerrar sesión">Salir</button>
+            </form>
+        </div>
     </div>
 </header>
 
@@ -151,7 +158,7 @@
                 <h2>Usuarios</h2>
                 <p><span id="users-count">0</span> registrados · contraseñas almacenadas con hash</p>
             </div>
-            <button class="btn btn-primary" id="new-user" type="button">+ Nuevo usuario</button>
+            <button class="btn btn-primary admin-only" id="new-user" type="button">+ Nuevo usuario</button>
         </header>
         <div class="toolbar">
             <div class="search">
@@ -169,7 +176,7 @@
         <div class="table-wrap">
             <table>
                 <thead>
-                <tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Creado</th><th class="right">Acciones</th></tr>
+                <tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Creado</th><th class="right admin-only">Acciones</th></tr>
                 </thead>
                 <tbody id="users-body"></tbody>
             </table>
