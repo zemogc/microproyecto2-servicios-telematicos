@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar sesión · {{ config.APP_NAME }}</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.svg') }}" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ config.APP_VERSION }}">
+</head>
+<body class="login-page">
+<div class="bg-glow" aria-hidden="true"></div>
+
+<main class="login card">
+    <div class="brand">
+        <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="" width="40" height="40">
+        <span>
+            <strong>{{ config.APP_NAME }}</strong>
+            <small>Centro de operaciones · v{{ config.APP_VERSION }}</small>
+        </span>
+    </div>
+    <h1>Inicia sesión</h1>
+    <p class="muted">Accede con tu cuenta para ver la infraestructura y gestionar usuarios.</p>
+
+    {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
+
+    <form method="post" action="{{ url_for('auth.login_post') }}">
+        <label>Usuario
+            <input name="username" autocomplete="username" required maxlength="30" value="{{ username or '' }}" autofocus>
+        </label>
+        <label>Contraseña
+            <input name="password" type="password" autocomplete="current-password" required maxlength="200">
+        </label>
+        <button class="btn btn-primary" type="submit">Entrar</button>
+    </form>
+</main>
+</body>
+</html>

@@ -37,13 +37,13 @@ def test_list_search_and_filter(client, make_user):
     make_user(name="Grace Hopper", email="grace@example.com", username="grace", role="devops")
 
     data = client.get("/api/users").get_json()
-    assert data["total"] == 2
+    assert data["total"] == 3  # incluye la cuenta admin inicial
 
     data = client.get("/api/users?q=grace").get_json()
     assert [u["username"] for u in data["items"]] == ["grace"]
 
-    data = client.get("/api/users?role=admin").get_json()
-    assert [u["username"] for u in data["items"]] == ["ada"]
+    data = client.get("/api/users?role=devops").get_json()
+    assert [u["username"] for u in data["items"]] == ["grace"]
 
 
 def test_update_keeps_password_when_omitted(client, make_user):
@@ -66,6 +66,6 @@ def test_delete_and_404(client, make_user):
 def test_stats_counts_by_role(client, make_user):
     make_user()
     stats = client.get("/api/users/stats").get_json()
-    assert stats["total"] == 1
-    assert stats["by_role"]["admin"] == 1
+    assert stats["total"] == 2
+    assert stats["by_role"]["admin"] == 2
     assert stats["by_role"]["viewer"] == 0

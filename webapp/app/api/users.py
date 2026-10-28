@@ -3,6 +3,7 @@ import re
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func, or_
 
+from ..auth import admin_required, current_user
 from ..extensions import db
 from ..models import ROLES, User
 
@@ -108,6 +109,7 @@ def get_user(user_id):
 
 
 @bp.post("")
+@admin_required
 def create_user():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -128,6 +130,7 @@ def create_user():
 
 
 @bp.put("/<int:user_id>")
+@admin_required
 def update_user(user_id):
     user = db.session.get(User, user_id)
     if user is None:
@@ -137,6 +140,8 @@ def update_user(user_id):
         return _error("Se esperaba un cuerpo JSON.", 400)
 
     clean, errors = _validate(data, partial=True)
+    if user.id == current_user().id and clean["role"] != "admin":
+        errors["role"] = "No puedes quitarte el rol de administrador."
     if errors:
         return _error("Datos inválidos.", 422, errors)
     conflicts = _conflicts(clean, exclude_id=user.id)
@@ -154,10 +159,13 @@ def update_user(user_id):
 
 
 @bp.delete("/<int:user_id>")
+@admin_required
 def delete_user(user_id):
     user = db.session.get(User, user_id)
     if user is None:
         return _error("Usuario no encontrado.", 404)
+    if user.id == current_user().id:
+        return _error("No puedes eliminar tu propia cuenta.", 400)
     db.session.delete(user)
     db.session.commit()
     return jsonify({"message": "Usuario eliminado."})
