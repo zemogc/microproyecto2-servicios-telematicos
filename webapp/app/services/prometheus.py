@@ -18,7 +18,7 @@ QUERIES = {
     "uptime_seconds": "max(time() - node_boot_time_seconds)",
     "request_rate": "sum(rate(opscenter_http_requests_total[5m]))",
     "error_rate_percent": (
-        'sum(rate(opscenter_http_requests_total{status=~"5.."}[5m]))'
+        '(sum(rate(opscenter_http_requests_total{status=~"5.."}[5m])) or vector(0))'
         " / clamp_min(sum(rate(opscenter_http_requests_total[5m])), 0.001) * 100"
     ),
     "latency_p95_ms": (
