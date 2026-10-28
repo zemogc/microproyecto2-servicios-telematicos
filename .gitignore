@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 nginx/certs/
 .env
+secrets/

@@ -1,10 +1,13 @@
 import logging
+import secrets
 import time
 
 from flask import Flask, jsonify, render_template, request
 from sqlalchemy.exc import OperationalError
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
+from .auth import ensure_admin, init_auth
 from .extensions import db
 from .metrics import init_metrics
 
@@ -23,6 +26,7 @@ def create_app(config_object="app.config.Config", init_db=False):
     app = Flask(__name__)
     app.config.from_object(config_object)
     app.json.sort_keys = False
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)  # detrás de Nginx
     db.init_app(app)
 
     from .api import insights, system, users
@@ -31,6 +35,7 @@ def create_app(config_object="app.config.Config", init_db=False):
     app.register_blueprint(insights.bp)
     app.register_blueprint(system.bp)
     init_metrics(app)
+    init_auth(app)  # después de las métricas: así también se cuentan los 401
 
     @app.get("/")
     def index():
@@ -65,7 +70,10 @@ def bootstrap_database(app, attempts=30, delay=2):
         if app.config["SEED_DEMO_DATA"] and User.query.count() == 0:
             for name, email, username, role in DEMO_USERS:
                 user = User(name=name, email=email, username=username, role=role)
-                user.set_password("Demo1234!")
+                # Datos de ejemplo sin contraseña conocida; un admin puede asignarla.
+                user.set_password(secrets.token_urlsafe(24))
                 db.session.add(user)
             db.session.commit()
             log.info("Sembrados %s usuarios demo", len(DEMO_USERS))
+
+        ensure_admin(app)

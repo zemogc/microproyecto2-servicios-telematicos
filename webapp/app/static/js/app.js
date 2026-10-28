@@ -15,10 +15,15 @@ const state = { q: "", role: "", editing: null, deleting: null };
 async function api(path, options = {}) {
     const resp = await fetch(path, {
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         ...options,
         body: options.body ? JSON.stringify(options.body) : undefined,
     });
     const data = await resp.json().catch(() => ({}));
+    if (resp.status === 401) {
+        location.href = "/login";  // sesión vencida
+        throw new Error(data.error || "Sesión vencida");
+    }
     if (!resp.ok) {
         const err = new Error(data.error || `Error ${resp.status}`);
         err.status = resp.status;
@@ -269,9 +274,9 @@ function renderUsers(users) {
             <td>${escapeHtml(u.email)}</td>
             <td><span class="role role-${u.role}">${ROLE_LABELS[u.role] || u.role}</span></td>
             <td title="${escapeHtml(new Date(u.created_at).toLocaleString("es-CO"))}">${relativeDate(u.created_at)}</td>
-            <td class="right"><div class="actions">
+            <td class="right admin-only"><div class="actions">
                 <button class="btn btn-sm" data-edit="${u.id}">Editar</button>
-                <button class="btn btn-sm btn-ghost" data-delete="${u.id}" data-name="${escapeHtml(u.name)}">Eliminar</button>
+                <button class="btn btn-sm btn-ghost" data-delete="${u.id}" ${String(u.id) === document.body.dataset.userId ? "hidden" : ""} data-name="${escapeHtml(u.name)}">Eliminar</button>
             </div></td>
         </tr>`).join("");
 }
