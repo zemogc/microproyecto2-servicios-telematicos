@@ -1,28 +1,65 @@
+name: opscenter
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
-  db:
-    image: mysql:8.0
+  certs:
+    image: alpine:3.20
+    command: ["sh", "/scripts/generate-certs.sh"]
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: opscenter
-      MYSQL_USER: opscenter
-      MYSQL_PASSWORD: opscenter
-    networks:
-      - red-app
+      CERT_HOSTS: ${CERT_HOSTS:-localhost,127.0.0.1,192.168.50.3}
+    volumes:
+      - ./nginx/generate-certs.sh:/scripts/generate-certs.sh:ro
+      - ./nginx/certs:/certs
+    restart: "no"
+
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root}
+      MYSQL_DATABASE: ${MYSQL_DB:-opscenter}
+      MYSQL_USER: ${MYSQL_USER:-opscenter}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
 
   app:
     build: ./webapp
+    image: opscenter-app:latest
     environment:
       MYSQL_HOST: db
-      MYSQL_USER: opscenter
-      MYSQL_PASSWORD: opscenter
-      MYSQL_DB: opscenter
+      MYSQL_USER: ${MYSQL_USER:-opscenter}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      MYSQL_DB: ${MYSQL_DB:-opscenter}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      PROMETHEUS_URL: http://prometheus:9090
+      GRAFANA_PUBLIC_URL: ${GRAFANA_PUBLIC_URL:-http://localhost:3000}
+      PROMETHEUS_PUBLIC_URL: ${PROMETHEUS_PUBLIC_URL:-http://localhost:9090}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-opus-5-5}
     depends_on:
-      - db
-    networks:
-      - red-app
+      db:
+        condition: service_healthy
+    networks: [backend, monitoring]
+    restart: unless-stopped
+    logging: *default-logging
 
   nginx:
-    image: nginx:latest
+    image: nginx:1.27-alpine
     ports:
       - "80:80"
       - "443:443"
@@ -30,40 +67,72 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
-      - app
-    networks:
-      - red-app
+      certs:
+        condition: service_completed_successfully
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://127.0.0.1/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    networks: [backend]
+    restart: unless-stopped
+    logging: *default-logging
 
   node_exporter:
-    image: prom/node-exporter:latest
-    container_name: node_exporter
-    networks:
-      - red-app
+    image: prom/node-exporter:v1.8.2
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($$|/)
+    pid: host
+    volumes:
+      - /:/host:ro
+    networks: [monitoring]
+    restart: unless-stopped
+    logging: *default-logging
 
   prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    depends_on:
-      - node_exporter
-    networks:
-      - red-app
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    depends_on: [node_exporter, app]
+    networks: [monitoring]
+    restart: unless-stopped
+    logging: *default-logging
 
   grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
+    image: grafana/grafana:11.2.2
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-    depends_on:
-      - prometheus
-    networks:
-      - red-app
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/opscenter.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on: [prometheus]
+    networks: [monitoring]
+    restart: unless-stopped
+    logging: *default-logging
 
 networks:
-  red-app:
+  backend:
+  monitoring:
+
+volumes:
+  mysql_data:
+  prometheus_data:
+  grafana_data:
