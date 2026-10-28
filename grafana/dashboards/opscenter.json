@@ -298,7 +298,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(opscenter_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(opscenter_http_requests_total[5m])), 0.001) * 100",
+          "expr": "(sum(rate(opscenter_http_requests_total{status=~\"5..\"}[5m])) or vector(0)) / clamp_min(sum(rate(opscenter_http_requests_total[5m])), 0.001) * 100",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
