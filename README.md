@@ -277,3 +277,7 @@ Crea una VM Ubuntu 22.04 en `192.168.50.3`, instala Docker y ejecuta `docker com
 | Disco aparece como "sin datos" | Node Exporter no ve sistemas de archivos ext4/xfs/btrfs/zfs escribibles en el host |
 | `429 Too Many Requests` en el copiloto | Es el rate limit de Nginx: espera un minuto |
 | Reiniciar desde cero | `docker compose down -v` (borra la BD y el historial de métricas) |
+
+## Licencia
+
+Distribuido bajo la licencia MIT. Consulta [LICENSE](LICENSE).
