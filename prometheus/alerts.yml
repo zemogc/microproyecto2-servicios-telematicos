@@ -1,0 +1,60 @@
+groups:
+  - name: infraestructura
+    rules:
+      - alert: TargetCaido
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "El target {{ $labels.job }} no responde"
+          description: "Prometheus no puede leer {{ $labels.instance }} desde hace más de 1 minuto."
+
+      - alert: CPUAlta
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU por encima del 85%"
+          description: "Uso de CPU sostenido de {{ $value | printf \"%.1f\" }}% en {{ $labels.instance }}."
+
+      - alert: MemoriaBaja
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memoria usada por encima del 90%"
+          description: "La memoria usada es {{ $value | printf \"%.1f\" }}% en {{ $labels.instance }}."
+
+      - alert: DiscoCasiLleno
+        expr: (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disco {{ $labels.mountpoint }} por encima del 85%"
+          description: "El sistema de archivos {{ $labels.mountpoint }} está al {{ $value | printf \"%.1f\" }}%."
+
+  - name: aplicacion
+    rules:
+      - alert: ErroresHTTP5xx
+        expr: |
+          sum(rate(opscenter_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(opscenter_http_requests_total[5m])), 0.001) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Más del 5% de las peticiones fallan con 5xx"
+          description: "Tasa de error actual: {{ $value | printf \"%.1f\" }}%."
+
+      - alert: LatenciaAlta
+        expr: histogram_quantile(0.95, sum by (le) (rate(opscenter_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latencia p95 por encima de 1 s"
+          description: "El percentil 95 de latencia es {{ $value | printf \"%.2f\" }} s."
