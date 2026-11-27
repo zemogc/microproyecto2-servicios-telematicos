@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: pruebas (python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: webapp
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: webapp/requirements*.txt
+      - run: pip install -r requirements-dev.txt pytest-cov
+      # Piso de cobertura: hoy ~90 %. Evita que baje sin que alguien lo note.
+      - run: python -m pytest -q -p no:warnings --cov=app --cov-report=term-missing --cov-fail-under=85
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install "ruff>=0.6"
+      # Errores reales (sintaxis, nombres sin definir o sin usar, argumentos mutables), no estilo.
+      - run: ruff check webapp --isolated --select E9,F,B006,B015,B018
+
+  dependencias:
+    name: dependencias (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      # Corre siempre: los avisos de seguridad aparecen sin que haya commits.
+      - run: pip-audit -r webapp/requirements.txt -r webapp/requirements-dev.txt --progress-spinner off
+
+  infraestructura:
+    name: infraestructura (compose, nginx, prometheus, imagen)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: docker-compose.yml válido
+        run: docker compose config -q
+      - name: Scripts de shell
+        run: |
+          sudo apt-get install -y -qq shellcheck >/dev/null
+          shellcheck scripts/generate-secrets.sh nginx/generate-certs.sh
+      - name: nginx -t con certificado de prueba
+        run: |
+          mkdir -p /tmp/certs
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=localhost" -keyout /tmp/certs/server.key -out /tmp/certs/server.crt
+          docker run --rm --add-host app:127.0.0.1 \
+            -v "$PWD/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" -v /tmp/certs:/etc/nginx/certs:ro \
+            nginx:1.27-alpine nginx -t
+      - name: promtool (configuración y alertas)
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v2.54.1 check config /etc/prometheus/prometheus.yml
+      - name: La imagen de la app construye y arranca la aplicación
+        run: |
+          docker build -t opscenter-app:ci ./webapp
+          docker run --rm --entrypoint python -e DATABASE_URL=sqlite:// opscenter-app:ci \
+            -c "from app import create_app; a = create_app(); print(a.config['APP_NAME'])"

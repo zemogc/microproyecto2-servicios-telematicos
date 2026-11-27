@@ -1,0 +1,8 @@
+# Falsos positivos conocidos: «latency_p95_ms» es el nombre de una métrica de la interfaz, no una clave.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Nombre de la métrica latency_p95_ms en app.js e index.html"
+regexTarget = "match"
+regexes = ['''latency_p95_ms''']
