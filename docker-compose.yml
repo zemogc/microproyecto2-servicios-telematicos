@@ -41,7 +41,8 @@ services:
       MYSQL_PASSWORD_FILE: /run/secrets/db_password
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./secrets:/run/secrets:ro
+      # Solo los secretos que este servicio necesita (mínimo privilegio): ver share() en scripts/generate-secrets.sh
+      - ./secrets/db:/run/secrets:ro
     depends_on:
       secrets:
         condition: service_completed_successfully
@@ -74,10 +75,16 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-claude-opus-5-5}
     volumes:
-      - ./secrets:/run/secrets:ro
+      # La app no necesita la contraseña de root de MySQL ni la de Grafana: si se compromete, no las ve
+      - ./secrets/app:/run/secrets:ro
     depends_on:
       db:
         condition: service_healthy
+    # Endurecimiento: sin privilegios nuevos, sin capacidades de Linux, sistema de archivos de solo lectura
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
     networks: [backend, monitoring]
     restart: unless-stopped
     logging: *default-logging
@@ -95,6 +102,11 @@ services:
         condition: service_completed_successfully
       app:
         condition: service_healthy
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE, CHOWN, SETUID, SETGID]
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run, /tmp]
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://127.0.0.1/health || exit 1"]
       interval: 15s
@@ -150,7 +162,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
-      - ./secrets:/run/secrets:ro
+      - ./secrets/grafana:/run/secrets:ro
     depends_on:
       prometheus:
         condition: service_started

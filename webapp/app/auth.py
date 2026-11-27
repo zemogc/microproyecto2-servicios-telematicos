@@ -84,6 +84,13 @@ def init_auth(app):
             return redirect(url_for("auth.login"))
         return None
 
+    @app.after_request
+    def no_store(response):
+        # Respuestas con datos de usuarios, métricas o diagnósticos: que ningún navegador ni proxy las guarde.
+        if request.path.startswith("/api/") or request.path in {"/login", "/"}:
+            response.headers.setdefault("Cache-Control", "no-store")
+        return response
+
     @app.context_processor
     def inject_user():
         return {"current_user": current_user()}

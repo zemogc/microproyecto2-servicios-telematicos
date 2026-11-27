@@ -175,3 +175,28 @@ def test_ask_claude_refusal_raises(monkeypatch):
     monkeypatch.setattr(copilot.anthropic, "Anthropic", FakeClient)
     with pytest.raises(CopilotUnavailable):
         copilot.ask_claude("k", "m", "low", HEALTHY, insights.evaluate(HEALTHY))
+
+
+def test_ask_claude_tiempos_menores_que_el_timeout_de_gunicorn(monkeypatch):
+    """Peor caso (intentos × timeout) debe quedar por debajo del timeout de gunicorn, o el worker muere a mitad de la petición."""
+    import importlib.util
+    import pathlib
+
+    from app.services import copilot
+
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.beta = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: (captured.update(kw) or SimpleNamespace(
+                stop_reason="end_turn", model="m", content=[SimpleNamespace(type="text", text="ok")]))))
+
+    monkeypatch.setattr(copilot.anthropic, "Anthropic", FakeClient)
+    copilot.ask_claude("k", "m", "low", HEALTHY, insights.evaluate(HEALTHY))
+    ruta = pathlib.Path(__file__).resolve().parent.parent / "gunicorn.conf.py"
+    spec = importlib.util.spec_from_file_location("gunicorn_conf", ruta)
+    conf = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(conf)
+    assert (captured["max_retries"] + 1) * captured["timeout"] < conf.timeout
+    assert captured["max_tokens"] <= 4096

@@ -221,7 +221,7 @@ La explicación de las métricas del sistema está en [METRICAS.md](METRICAS.md)
 - **Autorización por rol**: solo `admin` crea, edita o elimina usuarios. Un admin no puede borrarse ni quitarse el rol a sí mismo, para no dejar el sistema sin administrador.
 - **Protección CSRF**: las peticiones que modifican datos desde otro origen se rechazan (`403`).
 - **Freno a fuerza bruta**: `/login` admite 10 intentos por minuto por IP (luego `429`), los intentos fallidos quedan en el log y la respuesta tarda lo mismo exista o no el usuario.
-- **Sin contraseñas por defecto**: MySQL, la clave de sesión, el admin de OpsCenter y el de Grafana usan secretos aleatorios generados en `secrets/` y montados como archivos (`*_FILE`), no como variables a la vista.
+- **Sin contraseñas por defecto**: MySQL, la clave de sesión, el admin de OpsCenter y el de Grafana usan secretos aleatorios generados en `secrets/` y montados como archivos (`*_FILE`), no como variables a la vista. Cada servicio recibe **solo sus** secretos (`secrets/db`, `secrets/app`, `secrets/grafana`): la app no ve la contraseña de root de MySQL ni la de Grafana. Los contenedores de la app y de Nginx corren sin capacidades de Linux, sin privilegios nuevos y con el sistema de archivos de solo lectura.
 - **Monitoreo no expuesto**: Grafana y Prometheus solo escuchan en `127.0.0.1` y la API de administración de Prometheus (`/-/quit`, `/-/reload`) está desactivada.
 - Contraseñas con hash (`werkzeug.security`, scrypt). El hash nunca sale en la API.
 - TLS 1.2/1.3 con HTTP/2, HSTS, `Content-Security-Policy` estricta (sin scripts inline), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` y `Permissions-Policy`.
