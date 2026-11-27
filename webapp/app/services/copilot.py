@@ -24,6 +24,11 @@ Si el usuario hace una pregunta, respóndela primero dentro del diagnóstico. \
 Mantén la respuesta por debajo de 250 palabras."""
 
 
+TIMEOUT_S = 40.0
+MAX_RETRIES = 1
+MAX_TOKENS = 4096  # la respuesta pedida es de menos de 250 palabras
+
+
 class CopilotUnavailable(RuntimeError):
     pass
 
@@ -39,11 +44,12 @@ def ask_claude(api_key, model, effort, snapshot, health, question=""):
     if question:
         content += f"\n\nPregunta del usuario: {question}"
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=90.0, max_retries=2)
+    # Peor caso ≈ 2 intentos × 40 s: por debajo del timeout de gunicorn (120 s). Antes eran 3 × 90 s y gunicorn mataba el worker.
+    client = anthropic.Anthropic(api_key=api_key, timeout=TIMEOUT_S, max_retries=MAX_RETRIES)
     try:
         response = client.beta.messages.create(
             model=model,
-            max_tokens=16000,
+            max_tokens=MAX_TOKENS,
             betas=["server-side-fallback-2026-07-01"],
             output_config={"effort": effort},
             system=SYSTEM_PROMPT,

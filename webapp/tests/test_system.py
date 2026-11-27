@@ -22,3 +22,8 @@ def test_unknown_api_route_returns_json(client):
 
 def test_index_renders(client):
     assert client.get("/").status_code == 200
+
+
+def test_respuestas_de_la_api_no_se_guardan_en_cache(client):
+    assert client.get("/api/users").headers["Cache-Control"] == "no-store"
+    assert client.get("/api/config").headers["Cache-Control"] == "no-store"
